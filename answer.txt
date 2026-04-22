@@ -1,0 +1,1199 @@
+Ответы на вопросы со звездочкой
+
+Глава 3. Повторяем базовый SQL
+
+Задание: Создайте таблицу test_employees, вставьте сотрудника, увеличьте зарплату на 10% для отдела «Аналитика».
+
+Ответ:
+
+text
+/* создаём таблицу */
+CREATE TABLE test_employees (
+    employee_id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    department VARCHAR(50),
+    salary NUMERIC
+);
+
+/* вставляем одного сотрудника */
+INSERT INTO test_employees (name, department, salary)
+VALUES ('Иван Иванов', 'Аналитика', 100000);
+
+/* увеличиваем зарплату на 10% для отдела Аналитика */
+UPDATE test_employees
+SET salary = salary * 1.1
+WHERE department = 'Аналитика';
+
+
+Глава 4. Продвинутый SQL
+
+Задание: Напишите запрос, который выводит общую сумму выручки по каждому пользователю (user_id, user_name) и название страны, но только для пользователей из России и Казахстана. Используйте JOIN и WHERE с IN. Результат отсортируйте по сумме от большей к меньшей.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    u.country,
+    SUM(oi.quantity * oi.price_per_unit) AS total_revenue
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+JOIN order_items oi ON o.order_id = oi.order_id
+WHERE o.status = 'completed'
+  AND u.country IN ('Россия', 'Казахстан')
+GROUP BY u.user_id, u.user_name, u.country
+ORDER BY total_revenue DESC;
+
+
+Глава 5. UNION, INTERSECT, EXCEPT
+
+Задание: Напишите запрос, который выводит user_id пользователей, которые оставляли отзывы, но никогда не покупали товары из категории «Смартфоны». Используйте EXCEPT и подзапрос с JOIN.
+
+Ответ:
+
+text
+SELECT user_id FROM user_comments
+EXCEPT
+SELECT DISTINCT u.user_id
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id
+JOIN categories c ON p.category_id = c.category_id
+WHERE c.name = 'Смартфоны';
+
+
+Глава 6. CTE. Конверсия из регистрации в покупку
+
+Задание: Напишите запрос, который считает конверсию из регистрации в покупку для пользователей, зарегистрировавшихся в 2024 году. Используйте CTE.
+
+Ответ:
+
+text
+WITH all_users AS (
+    SELECT COUNT(*) AS total FROM users WHERE EXTRACT(YEAR FROM registered_at) = 2024
+),
+buying_users AS (
+    SELECT COUNT(DISTINCT o.user_id) AS buyers
+    FROM orders o
+    JOIN users u ON o.user_id = u.user_id
+    WHERE EXTRACT(YEAR FROM u.registered_at) = 2024
+)
+SELECT 
+    buyers,
+    total,
+    ROUND(100.0 * buyers / total, 2) AS conversion_rate
+FROM all_users, buying_users;
+
+
+Глава 7. JOIN, NOT EXISTS. Пользователи без покупок
+
+Задание: Напишите запрос, который находит пользователей, зарегистрировавшихся в 2024 году, 
+но не сделавших ни одного заказа со статусом «completed». Используйте NOT EXISTS.
+
+Ответ:
+
+text
+SELECT u.user_id, u.user_name, u.registered_at, u.country
+FROM users u
+WHERE EXTRACT(YEAR FROM u.registered_at) = 2024
+  AND NOT EXISTS (
+      SELECT 1 FROM orders o
+      WHERE o.user_id = u.user_id AND o.status = 'completed'
+  );
+
+
+Глава 8. GROUP BY, AVG. Средний чек по категориям
+
+Задание: Напишите запрос, который выводит средний чек по категориям для заказов, сделанных в феврале 2024 года. Используйте фильтр по дате и группировку.
+
+Ответ:
+
+text
+SELECT 
+    c.name AS category_name,
+    ROUND(AVG(oi.price_per_unit * oi.quantity), 2) AS avg_order_value
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id
+JOIN categories c ON p.category_id = c.category_id
+WHERE o.status = 'completed'
+  AND o.order_date BETWEEN '2024-02-01' AND '2024-02-29'
+GROUP BY c.category_id, c.name
+ORDER BY avg_order_value DESC;
+
+
+Глава 9. GROUP BY, COUNT. Повторные покупки
+
+Задание: Напишите запрос, который выводит пользователей, сделавших хотя бы 3 заказа со статусом «completed». Используйте HAVING.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    COUNT(o.order_id) AS orders_count
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+WHERE o.status = 'completed'
+GROUP BY u.user_id, u.user_name
+HAVING COUNT(o.order_id) >= 3
+ORDER BY orders_count DESC;
+
+Глава 10. GROUP BY, SUM. LTV пользователя
+
+Задание: Напишите запрос, который выводит топ-3 пользователей по LTV за 2024 год (используйте фильтр по order_date). Выведите user_id, user_name и ltv.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    SUM(oi.quantity * oi.price_per_unit) AS ltv
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+JOIN order_items oi ON o.order_id = oi.order_id
+WHERE o.status = 'completed'
+  AND EXTRACT(YEAR FROM o.order_date) = 2024
+GROUP BY u.user_id, u.user_name
+ORDER BY ltv DESC
+LIMIT 3;
+
+
+Глава 11. DATE_TRUNC, SUM, кросс-таблицы. Выручка по месяцам
+
+Задание: Напишите запрос, который строит кросс-таблицу выручки по кварталам (используйте DATE_TRUNC('quarter', order_date)) и категориям «Ноутбуки», «Смартфоны», «Планшеты».
+
+Ответ:
+
+text
+CREATE EXTENSION IF NOT EXISTS tablefunc;
+
+SELECT * FROM crosstab(
+    'SELECT 
+        DATE_TRUNC(''quarter'', o.order_date)::date AS quarter,
+        c.name AS category_name,
+        SUM(oi.quantity * oi.price_per_unit) AS revenue
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN products p ON oi.product_id = p.product_id
+    JOIN categories c ON p.category_id = c.category_id
+    WHERE o.status = ''completed''
+      AND c.name IN (''Ноутбуки'', ''Смартфоны'', ''Планшеты'')
+    GROUP BY quarter, c.category_id, c.name
+    ORDER BY 1,2',
+    'SELECT DISTINCT name FROM categories WHERE name IN (''Ноутбуки'', ''Смартфоны'', ''Планшеты'') ORDER BY 1'
+) AS ct(quarter date, "Ноутбуки" numeric, "Смартфоны" numeric, "Планшеты" numeric);
+
+
+Глава 12. Аналитические функции. Топ-5 товаров
+
+Задание: Напишите запрос, который выводит топ-2 товара по выручке в каждой категории. Используйте ROW_NUMBER() OVER (PARTITION BY ...).
+
+Ответ:
+
+text
+WITH product_revenue AS (
+    SELECT 
+        c.name AS category_name,
+        p.product_id,
+        p.name AS product_name,
+        SUM(oi.quantity * oi.price_per_unit) AS revenue
+    FROM order_items oi
+    JOIN products p ON oi.product_id = p.product_id
+    JOIN categories c ON p.category_id = c.category_id
+    GROUP BY c.name, p.product_id, p.name
+),
+ranked AS (
+    SELECT 
+        category_name,
+        product_name,
+        revenue,
+        ROW_NUMBER() OVER (PARTITION BY category_name ORDER BY revenue DESC) AS rank
+    FROM product_revenue
+)
+SELECT 
+    category_name,
+    product_name,
+    revenue,
+    rank
+FROM ranked
+WHERE rank <= 2
+ORDER BY category_name, rank;
+
+
+Глава 13. Аналитические функции. Retention 7 дней
+
+Задание: Посчитайте retention за 7 дней, но используйте только покупки (users_log с action = 'buy'). Измените фильтр в user_activity.
+
+Ответ:
+
+text
+WITH user_activity AS (
+    SELECT 
+        u.user_id,
+        u.registered_at::date AS reg_date,
+        DATE(l.dt_tm) AS activity_date
+    FROM users u
+    JOIN users_log l ON u.user_id = l.user_id
+    WHERE l.action = 'buy'
+    GROUP BY u.user_id, reg_date, activity_date
+),
+day_numbers AS (
+    SELECT 
+        reg_date,
+        (activity_date - reg_date) AS day_number,
+        COUNT(DISTINCT user_id) AS users
+    FROM user_activity
+    WHERE activity_date >= reg_date
+      AND activity_date <= reg_date + 7
+    GROUP BY reg_date, day_number
+)
+SELECT 
+    reg_date,
+    day_number,
+    users,
+    FIRST_VALUE(users) OVER (PARTITION BY reg_date ORDER BY day_number) AS day0_users,
+    ROUND(100.0 * users / FIRST_VALUE(users) OVER (PARTITION BY reg_date ORDER BY day_number), 2) AS retention_rate
+FROM day_numbers
+ORDER BY reg_date, day_number;
+
+
+Глава 14. COUNT(DISTINCT), CASE, CTE. Воронка событий
+
+Задание: Постройте воронку для действий: enter → add_to_cart → buy (без show). Измените запрос, убрав show.
+
+Ответ:
+
+text
+WITH user_actions AS (
+    SELECT DISTINCT
+        user_id,
+        action
+    FROM users_log
+),
+user_flags AS (
+    SELECT 
+        user_id,
+        MAX(CASE WHEN action = 'enter' THEN 1 ELSE 0 END) AS has_enter,
+        MAX(CASE WHEN action = 'add_to_cart' THEN 1 ELSE 0 END) AS has_add_to_cart,
+        MAX(CASE WHEN action = 'buy' THEN 1 ELSE 0 END) AS has_buy
+    FROM user_actions
+    GROUP BY user_id
+),
+funnel_counts AS (
+    SELECT 
+        COUNT(*) AS total_users,
+        SUM(has_enter) AS enter_count,
+        SUM(has_add_to_cart) AS add_to_cart_count,
+        SUM(has_buy) AS buy_count
+    FROM user_flags
+)
+SELECT 
+    total_users,
+    enter_count,
+    ROUND(100.0 * enter_count / total_users, 2) AS enter_to_total,
+    add_to_cart_count,
+    ROUND(100.0 * add_to_cart_count / enter_count, 2) AS add_to_cart_to_enter,
+    buy_count,
+    ROUND(100.0 * buy_count / add_to_cart_count, 2) AS buy_to_add_to_cart
+FROM funnel_counts;
+
+
+Глава 15. LAG, EXTRACT. Среднее время между enter и buy
+
+Задание: Посчитайте среднее время между add_to_cart и buy. Измените фильтр в filtered_log и условия в WHERE.
+
+Ответ:
+
+text
+WITH filtered_log AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm
+    FROM users_log
+    WHERE action IN ('add_to_cart', 'buy')
+),
+with_prev AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        LAG(dt_tm) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_dt_tm,
+        LAG(action) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_action
+    FROM filtered_log
+),
+cart_buy_pairs AS (
+    SELECT 
+        user_id,
+        prev_dt_tm AS cart_time,
+        dt_tm AS buy_time,
+        EXTRACT(epoch FROM (dt_tm - prev_dt_tm)) / 60 AS minutes_diff
+    FROM with_prev
+    WHERE action = 'buy' AND prev_action = 'add_to_cart'
+)
+SELECT 
+    COUNT(*) AS total_pairs,
+    ROUND(AVG(minutes_diff), 2) AS avg_minutes
+FROM cart_buy_pairs;
+
+
+Глава 16. JOIN, GROUP BY. Ошибки по странам
+
+Задание: Посчитайте количество ошибок по дням недели. Используйте EXTRACT(dow FROM dt_tm) и группировку.
+
+Ответ:
+
+text
+SELECT 
+    EXTRACT(dow FROM dt_tm) AS day_of_week,
+    COUNT(*) AS error_count
+FROM users_log
+WHERE action = 'error'
+GROUP BY EXTRACT(dow FROM dt_tm)
+ORDER BY day_of_week;
+
+
+Глава 17. ROW_NUMBER, LAG. Сессии пользователей
+
+Задание: Измените порог сессии на 15 минут вместо 30 и посчитайте, как изменилось количество сессий у пользователей.
+
+Ответ:
+
+text
+/* Меняем условие > 30 на > 15 в session_starts */
+WITH prev_time AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        LAG(dt_tm) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_dt_tm
+    FROM users_log
+),
+session_starts AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        CASE 
+            WHEN prev_dt_tm IS NULL THEN 1
+            WHEN EXTRACT(epoch FROM (dt_tm - prev_dt_tm)) / 60 > 15 THEN 1
+            ELSE 0
+        END AS is_new_session
+    FROM prev_time
+),
+session_numbers AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        SUM(is_new_session) OVER (PARTITION BY user_id ORDER BY dt_tm) AS session_id
+    FROM session_starts
+),
+session_stats AS (
+    SELECT 
+        user_id,
+        session_id,
+        MIN(dt_tm) AS session_start,
+        MAX(dt_tm) AS session_end,
+        COUNT(*) AS actions_count,
+        EXTRACT(epoch FROM (MAX(dt_tm) - MIN(dt_tm))) / 60 AS duration_minutes
+    FROM session_numbers
+    GROUP BY user_id, session_id
+)
+SELECT 
+    user_id,
+    COUNT(*) AS sessions_count,
+    SUM(actions_count) AS total_actions,
+    ROUND(AVG(duration_minutes), 2) AS avg_session_duration_minutes
+FROM session_stats
+GROUP BY user_id
+ORDER BY sessions_count DESC;
+
+
+Глава 18. EXISTS, подзапросы. Пользователи с ошибкой, но потом купили
+
+Задание: Найдите пользователей, у которых была ошибка после добавления товара в корзину (add_to_cart), но до покупки. Используйте EXISTS с двумя условиями.
+
+Ответ:
+
+text
+SELECT DISTINCT l1.user_id
+FROM users_log l1
+WHERE l1.action = 'error'
+  AND EXISTS (
+      SELECT 1
+      FROM users_log l2
+      WHERE l2.user_id = l1.user_id
+        AND l2.action = 'add_to_cart'
+        AND l2.dt_tm < l1.dt_tm
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM users_log l3
+      WHERE l3.user_id = l1.user_id
+        AND l3.action = 'buy'
+        AND l3.dt_tm > l1.dt_tm
+  );
+
+
+Глава 19. DATE_TRUNC, COUNT(DISTINCT). DAU по дням
+
+Задание: Посчитайте MAU (уникальных пользователей по месяцам) и добавьте процент изменений по сравнению с предыдущим месяцем. Используйте LAG.
+
+Ответ:
+
+text
+WITH monthly AS (
+    SELECT 
+        DATE_TRUNC('month', dt_tm) AS month,
+        COUNT(DISTINCT user_id) AS mau
+    FROM users_log
+    GROUP BY DATE_TRUNC('month', dt_tm)
+)
+SELECT 
+    TO_CHAR(month, 'YYYY-MM') AS month,
+    mau,
+    LAG(mau) OVER (ORDER BY month) AS prev_month_mau,
+    ROUND(
+        100.0 * (mau - LAG(mau) OVER (ORDER BY month)) / 
+        NULLIF(LAG(mau) OVER (ORDER BY month), 0),
+        2
+    ) AS percent_change
+FROM monthly
+ORDER BY month;
+
+
+Глава 20. CASE. Bounce rate
+
+Задание: Посчитайте bounce rate отдельно для действий enter (заход на сайт). Сессия считается отказной, если после enter не было других действий.
+
+Ответ:
+
+text
+WITH prev_time AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        LAG(dt_tm) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_dt_tm
+    FROM users_log
+),
+session_starts AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        CASE 
+            WHEN prev_dt_tm IS NULL THEN 1
+            WHEN EXTRACT(epoch FROM (dt_tm - prev_dt_tm)) / 60 > 30 THEN 1
+            ELSE 0
+        END AS is_new_session
+    FROM prev_time
+),
+session_numbers AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        SUM(is_new_session) OVER (PARTITION BY user_id ORDER BY dt_tm) AS session_id
+    FROM session_starts
+),
+session_actions AS (
+    SELECT 
+        user_id,
+        session_id,
+        COUNT(*) AS actions_count,
+        MIN(action) AS first_action,
+        CASE 
+            WHEN COUNT(*) = 1 AND MIN(action) = 'enter' THEN 1
+            ELSE 0
+        END AS is_bounce_enter_only
+    FROM session_numbers
+    GROUP BY user_id, session_id
+)
+SELECT 
+    COUNT(*) AS total_sessions,
+    SUM(is_bounce_enter_only) AS bounce_sessions,
+    ROUND(100.0 * SUM(is_bounce_enter_only) / COUNT(*), 2) AS bounce_rate_enter
+FROM session_actions;
+
+
+Глава 21. Новые пользователи по дням
+
+Задание: Посчитайте количество новых пользователей по дням недели (например, сколько человек зарегистрировалось в понедельник, во вторник и т.д.). Используйте EXTRACT(dow FROM registered_at).
+
+Ответ:
+
+text
+SELECT 
+    EXTRACT(dow FROM registered_at) AS day_of_week,
+    COUNT(*) AS new_users
+FROM users
+GROUP BY EXTRACT(dow FROM registered_at)
+ORDER BY day_of_week;
+Примечание: EXTRACT(dow FROM registered_at) возвращает номер дня недели (0 — воскресенье, 1 — понедельник, ..., 6 — суббота).
+
+
+Глава 22. Страна с самой высокой активностью
+
+Задание: Найдите страну с самой высокой активностью за последнюю неделю. Используйте фильтр по дате и LIMIT 1.
+
+Ответ:
+
+text
+SELECT 
+    u.country,
+    COUNT(*) AS actions_count
+FROM users_log l
+JOIN users u ON l.user_id = u.user_id
+WHERE l.dt_tm > CURRENT_DATE - INTERVAL '7 days'
+GROUP BY u.country
+ORDER BY actions_count DESC
+LIMIT 1;
+
+
+Глава 23. Неактивные пользователи
+
+Задание: Найдите пользователей, которые были активны в прошлом, но не проявляли активность за последние 30 дней. То есть у них есть хотя бы одно действие в логах вообще, но нет действий за последние 30 дней.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    u.registered_at,
+    u.country,
+    MAX(l.dt_tm) AS last_activity
+FROM users u
+JOIN users_log l ON u.user_id = l.user_id
+GROUP BY u.user_id, u.user_name, u.registered_at, u.country
+HAVING MAX(l.dt_tm) < CURRENT_DATE - INTERVAL '30 days'
+ORDER BY u.user_id;
+
+
+Глава 24. Пользователи, которые зарегистрировались, но не заходили
+
+Задание: Найдите пользователей, которые зарегистрировались более 7 дней назад, но ни разу не заходили на сайт. Используйте LEFT JOIN и фильтр по дате регистрации.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    u.registered_at,
+    u.country
+FROM users u
+LEFT JOIN users_log l ON u.user_id = l.user_id AND l.action = 'enter'
+WHERE u.registered_at < CURRENT_DATE - INTERVAL '7 days'
+  AND l.user_id IS NULL
+ORDER BY u.user_id;
+
+
+Глава 25. Пользователи с наибольшим количеством заказов
+
+Задание: Найдите пользователя с наибольшим количеством заказов за последние 30 дней. Используйте фильтр по дате и LIMIT 1.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    COUNT(o.order_id) AS orders_count
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+WHERE o.order_date > CURRENT_DATE - INTERVAL '30 days'
+GROUP BY u.user_id, u.user_name
+ORDER BY orders_count DESC
+LIMIT 1;
+
+
+Глава 26. LIKE, ILIKE, регулярные выражения
+
+Задание: Найдите отзывы, где упоминается «быстрая доставка» или «медленная доставка». Используйте регулярное выражение с |.
+
+Ответ:
+
+text
+SELECT 
+    comment_id,
+    user_id,
+    rating,
+    comment_text
+FROM user_comments
+WHERE comment_text ~* 'быстрая доставка|медленная доставка'
+ORDER BY comment_id;
+
+
+Глава 27. Полнотекстовый поиск
+
+Задание: Найдите отзывы, где слово «доволен» и слово «покупка» находятся на расстоянии не более 2 слов друг от друга. Используйте оператор <2>.
+
+Ответ:
+
+text
+SELECT 
+    comment_id,
+    user_id,
+    rating,
+    comment_text
+FROM user_comments
+WHERE to_tsvector('russian', comment_text) @@ to_tsquery('russian', 'доволен <2> покупка')
+ORDER BY comment_id;
+
+
+Глава 28. ts_rank. Релевантность отзывов
+
+Задание: Найдите топ-3 самых релевантных отзыва по запросу «отличный телефон». Используйте ts_rank и LIMIT 3.
+
+Ответ:
+
+text
+SELECT 
+    comment_id,
+    rating,
+    comment_text,
+    ts_rank(
+        to_tsvector('russian', comment_text),
+        to_tsquery('russian', 'отличный & телефон')
+    ) AS relevance
+FROM user_comments
+WHERE to_tsvector('russian', comment_text) @@ to_tsquery('russian', 'отличный & телефон')
+ORDER BY relevance DESC
+LIMIT 3;
+
+
+Глава 29. Товары с низким рейтингом
+
+Задание: Найдите топ-3 товара с самым высоким средним рейтингом (лучшие товары), у которых не менее 2 отзывов.
+
+Ответ:
+
+text
+SELECT 
+    p.product_id,
+    p.name,
+    COUNT(uc.comment_id) AS review_count,
+    ROUND(AVG(uc.rating), 2) AS avg_rating
+FROM products p
+JOIN user_comments uc ON p.product_id = uc.product_id
+GROUP BY p.product_id, p.name
+HAVING COUNT(uc.comment_id) >= 2
+ORDER BY avg_rating DESC
+LIMIT 3;
+
+
+Глава 30. Распределение оценок
+
+Задание: Посчитайте распределение оценок (количество и процент) для товара с product_id = 1 (iPhone 15).
+
+Ответ:
+
+text
+WITH rating_stats AS (
+    SELECT 
+        rating,
+        COUNT(*) AS review_count
+    FROM user_comments
+    WHERE product_id = 1
+    GROUP BY rating
+)
+SELECT 
+    rating,
+    review_count,
+    ROUND(100.0 * review_count / SUM(review_count) OVER (), 2) AS percentage
+FROM rating_stats
+ORDER BY rating;
+
+
+Глава 31. LENGTH, ORDER BY LIMIT. Топ самых длинных отзывов
+
+Задание: Найдите топ-3 самых длинных отзыва с рейтингом 5 (положительные). Используйте WHERE rating = 5 и LIMIT 3.
+
+Ответ:
+
+text
+SELECT 
+    comment_id,
+    user_id,
+    product_id,
+    rating,
+    LENGTH(comment_text) AS text_length,
+    LEFT(comment_text, 100) AS text_preview
+FROM user_comments
+WHERE rating = 5
+ORDER BY text_length DESC
+LIMIT 3;
+
+
+Глава 32. DATE_TRUNC. Пользователи по месяцам регистрации
+
+Задание: Посчитайте количество регистраций по кварталам. Используйте DATE_TRUNC('quarter', registered_at).
+
+Ответ:
+
+text
+SELECT 
+    DATE_TRUNC('quarter', registered_at) AS registration_quarter,
+    COUNT(*) AS new_users
+FROM users
+GROUP BY DATE_TRUNC('quarter', registered_at)
+ORDER BY registration_quarter;
+
+
+Глава 33. CURRENT_DATE, INTERVAL. Заказы за последнюю неделю
+
+Задание: Посчитайте количество и сумму заказов за последние 30 дней. Измените интервал с '7 days' на '30 days'.
+
+Ответ:
+
+text
+SELECT 
+    COUNT(*) AS orders_count,
+    SUM(oi.quantity * oi.price_per_unit) AS total_revenue
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+WHERE o.order_date >= CURRENT_DATE - INTERVAL '30 days'
+  AND o.status = 'completed';
+
+
+Глава 34. DATE(dt_tm). Самая активная дата по логам
+
+Задание: Найдите дату, когда было больше всего покупок (action = 'buy'). Используйте WHERE action = 'buy' и LIMIT 1.
+
+Ответ:
+
+text
+SELECT 
+    DATE(dt_tm) AS activity_date,
+    COUNT(*) AS buy_count
+FROM users_log
+WHERE action = 'buy'
+GROUP BY DATE(dt_tm)
+ORDER BY buy_count DESC
+LIMIT 1;
+
+
+Глава 35. AVG, ROWS BETWEEN. Скользящее среднее выручки
+
+Задание: Посчитайте скользящее среднее выручки за 14 дней. Измените ROWS BETWEEN 6 PRECEDING на ROWS BETWEEN 13 PRECEDING.
+
+Ответ:
+
+text
+WITH daily_revenue AS (
+    SELECT 
+        o.order_date,
+        SUM(oi.quantity * oi.price_per_unit) AS daily_revenue
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    WHERE o.status = 'completed'
+    GROUP BY o.order_date
+)
+SELECT 
+    order_date,
+    daily_revenue,
+    ROUND(
+        AVG(daily_revenue) OVER (ORDER BY order_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW),
+        2
+    ) AS moving_avg_14d
+FROM daily_revenue
+ORDER BY order_date;
+
+
+Глава 36. MIN, GROUP BY. Покупки в первый день после регистрации
+
+Задание: Найдите пользователей, которые купили в течение первых 3 дней после регистрации (включая день регистрации). Измените условие в HAVING.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    u.registered_at,
+    MIN(o.order_date) AS first_order_date
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+WHERE o.status = 'completed'
+  AND o.order_date >= u.registered_at
+GROUP BY u.user_id, u.user_name, u.registered_at
+HAVING MIN(o.order_date) <= u.registered_at + INTERVAL '2 days'
+ORDER BY u.user_id;
+
+
+Глава 37. JSONB ->>, WHERE, GROUP BY. Вытащить page из log_data
+
+Задание: Посчитайте, сколько раз пользователи заходили на страницу checkout (оформление заказа). Используйте WHERE log_data->>'page' = 'checkout'.
+
+Ответ:
+
+text
+SELECT 
+    COUNT(*) AS checkout_enter_count
+FROM users_log
+WHERE action = 'enter'
+  AND log_data->>'page' = 'checkout';
+
+
+Глава 38. jsonb_build_object. События с referrer = google
+
+Задание: Найдите все события, где referrer = 'google' и page = 'checkout'. Используйте @> с объектом из двух полей.
+
+Ответ:
+
+text
+SELECT 
+    log_id,
+    user_id,
+    log_data->>'referrer' AS referrer,
+    log_data->>'page' AS page
+FROM users_log
+WHERE action = 'enter'
+  AND log_data @> '{"referrer": "google", "page": "checkout"}'
+ORDER BY log_id;
+
+
+Глава 39. GROUP BY, ORDER BY, LIMIT. Топ-3 страниц входа
+
+Задание: Найдите топ-3 страницы входа для пользователей из России. Используйте JOIN с таблицей users и LIMIT 3.
+
+Ответ:
+
+text
+SELECT 
+    l.log_data->>'page' AS page,
+    COUNT(*) AS enter_count
+FROM users_log l
+JOIN users u ON l.user_id = u.user_id
+WHERE l.action = 'enter'
+  AND u.country = 'Россия'
+  AND l.log_data->>'page' IS NOT NULL
+GROUP BY l.log_data->>'page'
+ORDER BY enter_count DESC
+LIMIT 3;
+
+
+Глава 40. jsonb_set, UPDATE. Обновляем поле page в JSONB
+
+Задание: Обновите поле page с catalog на products для всех записей с action = 'enter' в таблице users_log_copy. Используйте jsonb_set и проверьте результат через SELECT.
+
+Ответ:
+
+text
+/* Обновляем page с 'catalog' на 'products' */
+UPDATE users_log_copy
+SET log_data = jsonb_set(
+    log_data,
+    '{page}',
+    '"products"',
+    false
+)
+WHERE action = 'enter'
+  AND log_data->>'page' = 'catalog';
+
+/* Проверяем результат */
+SELECT 
+    log_id,
+    user_id,
+    log_data->>'page' AS page
+FROM users_log_copy
+WHERE action = 'enter'
+  AND log_data->>'page' = 'products';
+
+
+Глава 41. LATERAL, Self JOIN. Топ-3 категорий и пары категорий
+
+Задание: Используйте LATERAL, чтобы для каждого пользователя найти топ-2 самых дорогих товара, которые он купил (по price_per_unit из order_items).
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    top_products.product_name,
+    top_products.price_per_unit
+FROM users u
+CROSS JOIN LATERAL (
+    SELECT 
+        p.name AS product_name,
+        oi.price_per_unit
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN products p ON oi.product_id = p.product_id
+    WHERE o.user_id = u.user_id
+      AND o.status = 'completed'
+    ORDER BY oi.price_per_unit DESC
+    LIMIT 2
+) AS top_products
+ORDER BY u.user_id, top_products.price_per_unit DESC;
+
+
+Глава 42. Сложный INSERT. Создать заказ со списком товаров
+
+Задание: Создайте заказ в orders_stack для пользователя user_id = 2 с двумя товарами: product_id = 2 (количество 1, цена 74900.00) и product_id = 10 (количество 1, цена 24900.00).
+
+Ответ:
+
+text
+WITH new_order AS (
+    INSERT INTO orders_stack (user_id, order_date, status)
+    VALUES (2, CURRENT_DATE, 'pending')
+    RETURNING order_id
+)
+INSERT INTO order_items_stack (order_id, product_id, quantity, price_per_unit)
+SELECT 
+    (SELECT order_id FROM new_order),
+    product_id,
+    quantity,
+    price
+FROM (VALUES 
+    (2, 1, 74900.00),
+    (10, 1, 24900.00)
+) AS items(product_id, quantity, price);
+
+
+Глава 43. MERGE. Обновить остатки или вставить новый
+
+Задание: Напишите MERGE-запрос, который обновляет остатки товаров на основе данных из order_items_stack (копии таблицы заказов). Увеличьте stock на количество проданных товаров (с отрицательным знаком).
+
+Ответ:
+
+text
+MERGE INTO inventory AS target
+USING (
+    SELECT 
+        product_id, 
+        SUM(quantity) AS sold_quantity
+    FROM order_items_stack
+    GROUP BY product_id
+) AS source
+ON target.product_id = source.product_id
+WHEN MATCHED THEN
+    UPDATE SET 
+        stock = target.stock - source.sold_quantity,
+        last_updated = CURRENT_DATE
+WHEN NOT MATCHED THEN
+    INSERT (product_id, stock, last_updated)
+    VALUES (source.product_id, -source.sold_quantity, CURRENT_DATE);
+
+
+Глава 44. LAG. Предыдущее действие пользователя
+
+Задание: Найдите пользователей, у которых перед покупкой было действие show. Используйте LAG и фильтр.
+
+Ответ:
+
+text
+WITH prev_actions AS (
+    SELECT 
+        user_id,
+        action,
+        LAG(action) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_action
+    FROM users_log
+)
+SELECT DISTINCT user_id
+FROM prev_actions
+WHERE action = 'buy' AND prev_action = 'show';
+
+
+Глава 45. LEAD. Следующее действие пользователя
+
+Задание: Найдите пользователей, у которых после добавления товара в корзину (add_to_cart) была покупка (buy). Используйте LEAD и фильтр.
+
+Ответ:
+
+text
+WITH next_actions AS (
+    SELECT 
+        user_id,
+        action,
+        LEAD(action) OVER (PARTITION BY user_id ORDER BY dt_tm) AS next_action
+    FROM users_log
+)
+SELECT DISTINCT user_id
+FROM next_actions
+WHERE action = 'add_to_cart' AND next_action = 'buy';
+
+
+Глава 46. AVG, DATE, вычитание дат. Среднее время доставки
+
+Задание: Посчитайте среднее время от отгрузки до доставки (delivered_date - shipped_date) для завершённых заказов (status = 'completed').
+
+Ответ:
+
+text
+SELECT 
+    ROUND(AVG(delivered_date - shipped_date), 2) AS avg_days_to_deliver
+FROM orders
+WHERE status = 'completed'
+  AND shipped_date IS NOT NULL
+  AND delivered_date IS NOT NULL;
+
+
+Глава 47. EXTRACT, CASE, WHERE. Заказы с доставкой более 5 дней
+
+Задание: Найдите заказы, у которых время от отгрузки до доставки (delivered_date - shipped_date) превышает 3 дня. Используйте WHERE и EXTRACT.
+
+Ответ:
+
+text
+SELECT 
+    order_id,
+    user_id,
+    shipped_date,
+    delivered_date,
+    (delivered_date - shipped_date) AS days_to_deliver
+FROM orders
+WHERE delivered_date IS NOT NULL
+  AND shipped_date IS NOT NULL
+  AND (delivered_date - shipped_date) > 3
+ORDER BY days_to_deliver DESC;
+
+
+Глава 48. JOIN, GROUP BY, COUNT, ORDER BY. Распределение способов оплаты по странам
+
+Задание: Посчитайте не количество платежей, а общую сумму платежей по странам и способам оплаты. Замените COUNT(*) на SUM(p.amount).
+
+Ответ:
+
+text
+SELECT 
+    u.country,
+    p.payment_method,
+    SUM(p.amount) AS total_amount
+FROM payments p
+JOIN orders o ON p.order_id = o.order_id
+JOIN users u ON o.user_id = u.user_id
+GROUP BY u.country, p.payment_method
+ORDER BY u.country, total_amount DESC;
+
+
+Глава 49. DATE_TRUNC, ROUND. Средний платёж по месяцам
+
+Задание: Посчитайте средний платёж по кварталам (используйте DATE_TRUNC('quarter', payment_date)) и добавьте процент изменения по сравнению с предыдущим кварталом.
+
+Ответ:
+
+text
+WITH quarterly_avg AS (
+    SELECT 
+        DATE_TRUNC('quarter', payment_date) AS quarter,
+        ROUND(AVG(amount), 2) AS avg_amount
+    FROM payments
+    GROUP BY DATE_TRUNC('quarter', payment_date)
+)
+SELECT 
+    TO_CHAR(quarter, 'YYYY-Q') AS quarter,
+    avg_amount,
+    LAG(avg_amount) OVER (ORDER BY quarter) AS prev_avg_amount,
+    ROUND(
+        100.0 * (avg_amount - LAG(avg_amount) OVER (ORDER BY quarter)) / 
+        NULLIF(LAG(avg_amount) OVER (ORDER BY quarter), 0),
+        2
+    ) AS percent_change
+FROM quarterly_avg
+ORDER BY quarter;
+
+
+Глава 50. COUNT(DISTINCT), HAVING. Пользователи, платившие разными способами
+
+Задание: Найдите пользователей, которые использовали три и более способов оплаты. Измените условие в HAVING на > 2.
+
+Ответ:
+
+text
+SELECT 
+    u.user_id,
+    u.user_name,
+    COUNT(DISTINCT p.payment_method) AS unique_payment_methods
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+JOIN payments p ON o.order_id = p.order_id
+GROUP BY u.user_id, u.user_name
+HAVING COUNT(DISTINCT p.payment_method) > 2
+ORDER BY unique_payment_methods DESC;
+
+
+Глава 51. COUNT(DISTINCT), JOIN, CTE, CASE. Конверсия из add_to_cart в buy
+
+Задание: Посчитайте конверсию из добавления в корзину в покупку для каждого месяца. Используйте DATE_TRUNC('month', dt_tm) и группировку.
+
+Ответ:
+
+text
+WITH cart_events AS (
+    SELECT 
+        DATE_TRUNC('month', dt_tm) AS month,
+        user_id
+    FROM users_log
+    WHERE action = 'add_to_cart'
+),
+buy_events AS (
+    SELECT 
+        DATE_TRUNC('month', dt_tm) AS month,
+        user_id
+    FROM users_log
+    WHERE action = 'buy'
+),
+cart_buy AS (
+    SELECT 
+        c.month,
+        COUNT(DISTINCT c.user_id) AS cart_users,
+        COUNT(DISTINCT b.user_id) AS buy_users
+    FROM cart_events c
+    LEFT JOIN buy_events b ON c.user_id = b.user_id AND c.month = b.month
+    GROUP BY c.month
+)
+SELECT 
+    month,
+    cart_users,
+    buy_users,
+    ROUND(100.0 * buy_users / NULLIF(cart_users, 0), 2) AS conversion_rate
+FROM cart_buy
+ORDER BY month;
+
+
+Глава 52. LAG, EXTRACT, AVG. Среднее время между add_to_cart и buy
+
+Задание: Посчитайте среднее время между add_to_cart и buy только для тех случаев, когда разница меньше 60 минут (исключая аномалии).
+
+Ответ:
+
+text
+WITH events AS (
+    SELECT 
+        user_id,
+        action,
+        dt_tm,
+        LAG(action) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_action,
+        LAG(dt_tm) OVER (PARTITION BY user_id ORDER BY dt_tm) AS prev_dt_tm
+    FROM users_log
+    WHERE action IN ('add_to_cart', 'buy')
+),
+cart_buy_pairs AS (
+    SELECT 
+        user_id,
+        prev_dt_tm AS cart_time,
+        dt_tm AS buy_time,
+        EXTRACT(epoch FROM (dt_tm - prev_dt_tm)) / 60 AS minutes_diff
+    FROM events
+    WHERE action = 'buy' AND prev_action = 'add_to_cart'
+)
+SELECT 
+    COUNT(*) AS pairs_count,
+    ROUND(AVG(minutes_diff), 2) AS avg_minutes
+FROM cart_buy_pairs
+WHERE minutes_diff < 60;
+
+
+
+
